@@ -28,7 +28,7 @@ ColorErase = False        #
 #+----------------------+#
 
 #動画ファイルのパス
-videofile_path = "nihongi_f_f1.mp4"
+videofile_path = "20191122/nihongi_n_n1.mp4"
 
 #5x5のカーネル
 kernel = np.ones((8,8),np.uint8)
@@ -57,29 +57,28 @@ def Trackbars_init():
 def color_detect(hsv, img):
     hsv_min = np.array([15,127,0])
     hsv_max = np.array([240,255,255])
-    mask1 = cv2.inRange(hsv, hsv_min, hsv_max)
+    mask = cv2.inRange(hsv, hsv_min, hsv_max)
 
-    hsv_min = np.array([150,127,0])
-    hsv_max = np.array([179,255,255])
-    mask2 = cv2.inRange(hsv, hsv_min, hsv_max)
-
-    return mask1+mask2
+    return mask
 
 #ブロブ解析
 def analysis_blob(binary_img):
     label = cv2.connectedComponentsWithStats(binary_img)
     n = label[0] - 1
-
     data = np.delete(label[2], 0, 0)
     center = np.delete(label[3], 0, 0)
-    max_index = np.argmax(data[:, 4])
-
     maxblob = {}
-    maxblob["upper_left"] = (data[:, 0][max_index], data[:, 1][max_index]) # 左上座標
-    maxblob["width"] = data[:, 2][max_index]
-    maxblob["height"] = data[:, 3][max_index]
-    maxblob["area"] = data[:, 4][max_index]
-    maxblob["center"] = center[max_index]
+    if len(data[:, 4]) is 0:
+        max_index = None
+        maxblob["center"] = [0, 0]
+    else:
+        max_index = np.argmax(data[:, 4])
+
+        maxblob["upper_left"] = (data[:, 0][max_index], data[:, 1][max_index]) # 左上座標
+        maxblob["width"] = data[:, 2][max_index]
+        maxblob["height"] = data[:, 3][max_index]
+        maxblob["area"] = data[:, 4][max_index]
+        maxblob["center"] = center[max_index]
 
     return data, center, maxblob
 
@@ -90,12 +89,15 @@ def data_plot(data):
     x = data_np[:,1]
     y = data_np[:,2]
 
+    print(t, x, y)
+
     plt.rcParams["font.family"] = "Times New Roman"
     plt.plot(t, x, "r-", label="x")
     plt.plot(t, y, "b-", label="y")
-    plt.xlabel("Time[sec]", fontsize=16)
+    plt.xlabel("Frame [num]", fontsize=16)
     plt.ylabel("Position[px]", fontsize=16)
     plt.grid()
+
     plt.legend(loc=1, fontsize=16)
     plt.show()
 
@@ -143,7 +145,7 @@ def main():
     start = time.time()
     if t_init is True:
         Trackbars_init()
-
+    n = 0
     while(cap.isOpened()):
         ret, frame = cap.read()
         if frame is None:
@@ -154,9 +156,13 @@ def main():
         frame = frame[80:h, 0:w]
 
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-
+        #"""
         Lh, Ls, Lv = trackbars()[:3]
         Hh, Hs, Hv = trackbars()[3:]
+        """
+        Lh, Ls, Lv = (40, 40, 109)
+        Hh, Hs, Hv = (121, 255, 255)
+        """
         hsv_min = np.array([Lh,Ls,Lv])
         hsv_max = np.array([Hh,Hs,Hv])
 
@@ -171,30 +177,31 @@ def main():
         if closing is True: mask = Closing(mask)
         if ColorErase is True: mask = color_eraser(mask, None)
 
-        #mask = resize_image(mask, None, .25, .25)
-        #cv2.imshow("mask", mask)
-        try:
-            data, center, target = analysis_blob(mask)
-            print("targetnum:",len(center))
-            for i in center:
-                cv2.circle(frame, (int(i[0]), int(i[1])), 10, (255, 0, 0),
-                        thickness=-3, lineType=cv2.LINE_AA)
+        _, center, maxblob = analysis_blob(mask)
+        #print("targetnum:",len(center))
+        for i in center:
+            cv2.circle(frame, (int(i[0]), int(i[1])), 10, (255, 0, 0),
+                    thickness=-3, lineType=cv2.LINE_AA)
 
-            center_x = int(target["center"][0])
-            center_y = int(target["center"][1])
+        center_x = int(maxblob["center"][0])
+        center_y = int(maxblob["center"][1])
 
-            cv2.circle(frame, (center_x, center_y), 30, (0, 200, 0),
-                    thickness=3, lineType=cv2.LINE_AA)
+        #print(center_x, center_y)
 
-            data.append([time.time() - start, center_x, center_y])
-            #print(time.time() - start, center_x, center_y)
-        except:
-            pass
+        cv2.circle(frame, (center_x, center_y), 30, (0, 200, 0),
+                  thickness=3, lineType=cv2.LINE_AA)
 
-        re_frame=resize_image(frame, None, .25, .25)
+        #data.append([time.time() - start, center_x, center_y])
+        data.append([n, center_x, center_y])
+        #print(time.time() - start, center_x, center_y)
+
+        re_frame=resize_image(frame, None, .4, .4)
         cv2.imshow("Frame", re_frame)
-        mask = resize_image(mask, None, .25, .25)
+        mask = resize_image(mask, None, .4, .4)
         cv2.imshow("image_mask", mask)
+        n += 1
+        print(n)
+        print("----------")
 
         if cv2.waitKey(1000) & 0xFF == ord('q'):
             break

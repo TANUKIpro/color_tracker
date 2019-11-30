@@ -1,15 +1,29 @@
 # -*- coding: utf-8 -*-
+
 #http://labs.eecs.tottori-u.ac.jp/sd/Member/oyamada/OpenCV/html/py_tutorials/py_imgproc/py_morphological_ops/py_morphological_ops.html
+
+#ROSとOpenCVの競合を避ける
+import sys
+try:
+    py_path = sys.path
+    if py_path[3] == '/opt/ros/kinetic/lib/python2.7/dist-packages':
+        print("INFO : ROS and OpenCV are competing")
+        sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
+except:
+    pass
 
 import cv2
 import numpy as np
 import time
 import matplotlib.pyplot as plt
-import scipy.ndimage as ndimage
-from scipy.optimize import curve_fit
+try:
+    import scipy.ndimage as ndimage
+    from scipy.optimize import curve_fit
+except:
+    pass
 
 #+------trackbar--------+#
-t_init = True            #
+t_init = False            #
 #+----------------------+#
 #+-----MedianBlur-------+#
 MB = True                #
@@ -23,12 +37,16 @@ opening = True           #
 #+-------closing--------+#
 closing = True           #
 #+----------------------+#
-#+----特定色の消去------+#
+#+----特定色の消去-------+#
 ColorErase = False        #
 #+----------------------+#
 
 #動画ファイルのパス
-videofile_path = "20191122/nihongi_n_n1.mp4"
+#Windowsは、コマンドライン引数を使用するときの
+#絶対パスの指定が面倒くさいのでコメントアウトしておいてください
+
+#videofile_path = 'test.mp4'
+videofile_path = sys.argv[1]
 
 #5x5のカーネル
 kernel = np.ones((8,8),np.uint8)
@@ -74,7 +92,7 @@ def analysis_blob(binary_img):
     else:
         max_index = np.argmax(data[:, 4])
 
-        maxblob["upper_left"] = (data[:, 0][max_index], data[:, 1][max_index]) # 左上座標
+        maxblob["upper_left"] = (data[:, 0][max_index], data[:, 1][max_index])
         maxblob["width"] = data[:, 2][max_index]
         maxblob["height"] = data[:, 3][max_index]
         maxblob["area"] = data[:, 4][max_index]
@@ -85,15 +103,21 @@ def analysis_blob(binary_img):
 #データ出力
 def data_plot(data):
     data_np = np.array(data)
-    t = data_np[:,0]
-    x = data_np[:,1]
-    y = data_np[:,2]
+    if len(data_np) <= 0:
+        print("too many indices for array")
+        f = 0
+        x = 0
+        y = 0
+    else:
+        f = data_np[:,0]
+        x = data_np[:,1]
+        y = data_np[:,2]
 
-    print(t, x, y)
+    print(f, x, y)
 
-    plt.rcParams["font.family"] = "Times New Roman"
-    plt.plot(t, x, "r-", label="x")
-    plt.plot(t, y, "b-", label="y")
+    #plt.rcParams["font.family"] = "Times New Roman"
+    plt.plot(f, x, "r-", label="x")
+    plt.plot(f, y, "b-", label="y")
     plt.xlabel("Frame [num]", fontsize=16)
     plt.ylabel("Position[px]", fontsize=16)
     plt.grid()
@@ -142,33 +166,49 @@ def resize_image(img, dsize, X, Y):
 def main():
     data = []
     cap = cv2.VideoCapture(videofile_path)
-    start = time.time()
+
     if t_init is True:
         Trackbars_init()
     n = 0
+    
+    if cap.isOpened():
+        print("INFO : The Video loaded successfully.")
+    else:
+        print("INFO : LOAD ERROR ***Chack video path or name.***")
+        print("CAP : ", cap)
+        exit()
+        
     while(cap.isOpened()):
         ret, frame = cap.read()
         if frame is None:
             print("frame is None")
             break
+        
         #画像の認識範囲を狭めるためのトリミング操作
+        """
         h, w = frame.shape[:2]
         frame = frame[80:h, 0:w]
-
+        """
+        
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        #"""
-        Lh, Ls, Lv = trackbars()[:3]
-        Hh, Hs, Hv = trackbars()[3:]
-        """
-        Lh, Ls, Lv = (40, 40, 109)
-        Hh, Hs, Hv = (121, 255, 255)
-        """
+        
+        #hsv決め打ちの時はココを編集
+        if t_init is True:
+            Lh, Ls, Lv = trackbars()[:3]
+            Hh, Hs, Hv = trackbars()[3:]
+        else:
+            #青
+            Lh, Ls, Lv = (40, 40, 109)
+            Hh, Hs, Hv = (121, 255, 255)
+        
         hsv_min = np.array([Lh,Ls,Lv])
         hsv_max = np.array([Hh,Hs,Hv])
 
-        #print( "H:{0} - {1}\nS:{2} - {3}\nV:{4} - {5}\n-------------"
-            #.format(Lh, Hh, Ls, Hs, Lv, Hv))
-
+        """
+        print( "H:{0} - {1}\nS:{2} - {3}\nV:{4} - {5}\n-------------"
+            .format(Lh, Hh, Ls, Hs, Lv, Hv))
+        """
+        
         mask = cv2.inRange(hsv, hsv_min, hsv_max)
 
         if MB is True: mask = median_blar(mask, 3)
@@ -186,21 +226,19 @@ def main():
         center_x = int(maxblob["center"][0])
         center_y = int(maxblob["center"][1])
 
-        #print(center_x, center_y)
+        print(center_x, center_y)
 
         cv2.circle(frame, (center_x, center_y), 30, (0, 200, 0),
                   thickness=3, lineType=cv2.LINE_AA)
 
-        #data.append([time.time() - start, center_x, center_y])
         data.append([n, center_x, center_y])
-        #print(time.time() - start, center_x, center_y)
 
         re_frame=resize_image(frame, None, .4, .4)
         cv2.imshow("Frame", re_frame)
         mask = resize_image(mask, None, .4, .4)
         cv2.imshow("image_mask", mask)
         n += 1
-        print(n)
+        #print(n)
         print("----------")
 
         if cv2.waitKey(1000) & 0xFF == ord('q'):
@@ -208,7 +246,7 @@ def main():
 
     cap.release()
     cv2.destroyAllWindows()
-
+    
     data_plot(data)
 
 if __name__ == '__main__':

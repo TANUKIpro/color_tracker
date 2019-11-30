@@ -6,40 +6,39 @@
 import sys
 try:
     py_path = sys.path
-    if py_path[3] == '/opt/ros/kinetic/lib/python2.7/dist-packages':
+    ros_CVpath = '/opt/ros/kinetic/lib/python2.7/dist-packages'
+    if py_path[3] == ros_CVpath:
         print("INFO : ROS and OpenCV are competing")
-        sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
-except:
-    pass
+        sys.path.remove(py_path[3])
+except: pass
 
 import cv2
 import numpy as np
 import time
 import matplotlib.pyplot as plt
+
 try:
     import scipy.ndimage as ndimage
     from scipy.optimize import curve_fit
-except:
-    pass
+except: pass
 
-#+------trackbar--------+#
-t_init = False            #
-#+----------------------+#
-#+-----MedianBlur-------+#
-MB = True                #
-#+----------------------+#
-#+-----fill_holes-------+#
-#fill_holes = False       #
-#+----------------------+#
-#+-------opening--------+#
-opening = True           #
-#+----------------------+#
-#+-------closing--------+#
-closing = True           #
-#+----------------------+#
-#+----特定色の消去-------+#
-ColorErase = False        #
-#+----------------------+#
+#+-----[トラックバー]------+#
+t_init = False
+
+#+-----[MedianBlur]-------+#
+MB = True
+
+#+-----[fill_holes]-------+#
+fill_holes = False
+
+#+-------[opening]--------+#
+opening = True
+
+#+-------[closing]--------+#
+closing = True
+
+#+----[特定色の消去]-------+#
+ColorErase = False
 
 #動画ファイルのパス
 #Windowsは、コマンドライン引数を使用するときの
@@ -115,7 +114,7 @@ def data_plot(data):
 
     print(f, x, y)
 
-    #plt.rcParams["font.family"] = "Times New Roman"
+    plt.rcParams["font.family"] = "Times New Roman"
     plt.plot(f, x, "r-", label="x")
     plt.plot(f, y, "b-", label="y")
     plt.xlabel("Frame [num]", fontsize=16)
@@ -164,12 +163,12 @@ def resize_image(img, dsize, X, Y):
 
 #メイン
 def main():
+    n = 0
     data = []
     cap = cv2.VideoCapture(videofile_path)
 
     if t_init is True:
         Trackbars_init()
-    n = 0
     
     if cap.isOpened():
         print("INFO : The Video loaded successfully.")
@@ -218,7 +217,7 @@ def main():
         if ColorErase is True: mask = color_eraser(mask, None)
 
         _, center, maxblob = analysis_blob(mask)
-        #print("targetnum:",len(center))
+        #print("target num:",len(center))
         for i in center:
             cv2.circle(frame, (int(i[0]), int(i[1])), 10, (255, 0, 0),
                     thickness=-3, lineType=cv2.LINE_AA)

@@ -6,7 +6,7 @@
 videofile_path = '../PATH/test.mp4'
 ```  
 **[実行]**  
-`$python hsv_supporter.py`  
+`$python3 hsv_supporter.py`  
 
   
 ★コンソール画面からパスを引数として受け取る場合、以下を有効にすること
@@ -14,7 +14,7 @@ videofile_path = '../PATH/test.mp4'
 videofile_path = sys.argv[1]
 ```
 **[実行]**  
-`$python hsv_supporter.py ~/PATH/test.mp4`  
+`$python3 hsv_supporter.py ~/PATH/test.mp4`  
   
 ## コードの解説(知見)
 **[ROSとOpencvの競合]**  

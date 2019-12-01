@@ -2,7 +2,7 @@
 ### /hsv_supporter.py
 **[使い方]**  
 ★直接パスを指定する場合、以下を有効にして実行場所からの相対パスを指定
-```
+```bash
 videofile_path = '../PATH/test.mp4'
 ```  
 **[実行]**  
@@ -10,7 +10,7 @@ videofile_path = '../PATH/test.mp4'
 
   
 ★コンソール画面からパスを引数として受け取る場合、以下を有効にすること
-```
+```bash
 videofile_path = sys.argv[1]
 ```
 **[実行]**  
@@ -18,7 +18,7 @@ videofile_path = sys.argv[1]
   
 ## コードの解説(知見)
 **[ROSとOpencvの競合]**  
-```
+```python
 import sys
 try:
     py_path = sys.path
@@ -34,7 +34,7 @@ __ROS__(Kinetic, Indigoで確認)のDesktopfullをインストールしてある
 この回避方法は、[こちらのサイト](https://qiita.com/ReoNagai/items/112c3a8b6cd55c3e5380)が参考になった。
   
 **[今回使ったノイズの除去アルゴリズム]**  
-```
+```python
 #+-----[MedianBlur]-------+#
 MB = True
 
@@ -53,7 +53,7 @@ __cv2.medianBlur()__ 関数はカーネル内の全画素の中央値を計算�
 [ここから抜粋](http://labs.eecs.tottori-u.ac.jp/sd/Member/oyamada/OpenCV/html/py_tutorials/py_imgproc/py_filtering/py_filtering.html)  
 
 プログラム内では以下の関数を用意した。~~別に用意する必要はないがなんでか追加した~~
-```
+```python
 def median_blar(image, size):
     _image = cv2.medianBlur(image, size)
     return _image
@@ -64,7 +64,7 @@ def median_blar(image, size):
 こんな感じでノイズ除去される  
 ![opening](/image/opening.png)  
 プログラム内では以下の関数を用意した。
-```
+```python
 def Opening(image):
     opening = cv2.morphologyEx(image, cv2.MORPH_OPEN, kernel)
     return opening
@@ -75,7 +75,7 @@ def Opening(image):
 こんな感じでノイズ除去される  
 ![opening](/image/closing.png)  
 プログラム内では以下の関数を用意した。
-```
+```python
 def Closing(image):
     closing = cv2.morphologyEx(image, cv2.MORPH_CLOSE, kernel)
     return closing

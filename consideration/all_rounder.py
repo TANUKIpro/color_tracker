@@ -19,30 +19,30 @@ try:
 except: pass
 
 class Mouse:
-    def __init__(self):
-        self.input_img_name="color_image"
+    def __init__(self, window_name):
+        self.input_img_name = window_name
         self.mouseEvent = {"x":None, "y":None, "event":None, "flags":None}
 
     def __CallBackFunc(self, eventType, x, y, flags, userdata):
         self.mouseEvent["x"] = x
         self.mouseEvent["y"] = y
-        self.mouseEvent["event"] = eventType    
+        self.mouseEvent["event"] = eventType
         self.mouseEvent["flags"] = flags
 
     def getData(self):
         return self.mouseEvent
-        
+
     def getEvent(self):
-        return self.mouseEvent["event"]                
+        return self.mouseEvent["event"]
 
     def getFlags(self):
-        return self.mouseEvent["flags"]                
+        return self.mouseEvent["flags"]
 
     def posXY(self):
         x = self.mouseEvent["x"]
         y = self.mouseEvent["y"]
         return (x, y)
-        
+
 
 class HSV_supporter:
     def __init__(self):
@@ -51,9 +51,9 @@ class HSV_supporter:
         self.opening    = True
         self.closing    = True
         self.ColorErase = False
+
         self.kernel = np.ones((8,8),np.uint8)
 
-   
     #トラックバーの初期設定
     def callback(self, x):
         pass
@@ -110,14 +110,25 @@ class HSV_supporter:
             x = data_np[:,1]
             y = data_np[:,2]
 
-        print(f, x, y)
+        #xの勾配dxを求める
+        dx = np.gradient(x)
 
         plt.rcParams["font.family"] = "Times New Roman"
+
+        #1つ目のグラフ描画
+        plt.subplot(1,2,1)
         plt.plot(f, x, "r-", label="x")
         plt.plot(f, y, "b-", label="y")
         plt.xlabel("Frame [num]", fontsize=16)
         plt.ylabel("Position[px]", fontsize=16)
-        plt.grid()
+        plt.grid(True)
+
+        #2つ目のグラフ描画
+        plt.subplot(1,2,2)
+        plt.plot(f, dx, "g-", label="dx")
+        plt.xlabel("Frame [num]", fontsize=16)
+        plt.ylabel("Position[px]", fontsize=16)
+        plt.grid(True)
 
         plt.legend(loc=1, fontsize=16)
         plt.show()
@@ -159,36 +170,39 @@ class HSV_supporter:
         re_image = cv2.resize(img, dsize, fx=X, fy=Y)
         return re_image
 
+    def draw_ClickedPoint(self, M_x, M_y, image):
+        pass
+
     #メイン
-    def main(self):
+    def main(self, videofile_path):
         n = 0
         data = []
         cap = cv2.VideoCapture(videofile_path)
 
         if self.t_init is True:
             self.Trackbars_init()
-    
+
         if cap.isOpened():
             print("INFO : The Video loaded successfully.")
         else:
             print("INFO : LOAD ERROR ***Chack video path or name.***")
             print("CAP : ", cap)
             exit()
-        
+
         while(cap.isOpened()):
             ret, frame = cap.read()
             if frame is None:
                 print("frame is None")
                 break
-        
+
             #画像の認識範囲を狭めるためのトリミング操作
             """
             h, w = frame.shape[:2]
             frame = frame[80:h, 0:w]
             """
-        
+
             hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        
+
             #hsv決め打ちの時はココを編集
             if self.t_init is True:
                 Lh, Ls, Lv = self.trackbars()[:3]
@@ -197,7 +211,7 @@ class HSV_supporter:
                 #青
                 Lh, Ls, Lv = (40, 40, 109)
                 Hh, Hs, Hv = (121, 255, 255)
-        
+
             hsv_min = np.array([Lh,Ls,Lv])
             hsv_max = np.array([Hh,Hs,Hv])
 
@@ -229,7 +243,7 @@ class HSV_supporter:
 
             cv2.circle(frame, (center_x, center_y), 30, (0, 200, 0),
                       thickness=3, lineType=cv2.LINE_AA)
-    
+
             data.append([n, center_x, center_y])
 
             re_frame=self.resize_image(frame, None, .4, .4)
@@ -237,21 +251,22 @@ class HSV_supporter:
             mask = self.resize_image(mask, None, .4, .4)
             cv2.imshow("image_mask", mask)
             n += 1
-            #print(n)
+            print(n)
             print("----------")
-    
+
             if cv2.waitKey(1000) & 0xFF == ord('q'):
                 break
 
         cap.release()
         cv2.destroyAllWindows()
-    
+
         self.data_plot(data)
 
 if __name__ == '__main__':
-    #videofile_path = "20191122/nihongi_f_l1.mp4"
-    videofile_path = sys.argv[1]
-    
+    try:
+        #videofile_path = "20191122/nihongi_f_l1.mp4"
+        videofile_path = sys.argv[1]
+    except: print("Not set video")
+
     hsv_sup = HSV_supporter()
-    hsv_sup.main()
-    
+    hsv_sup.main(videofile_path)

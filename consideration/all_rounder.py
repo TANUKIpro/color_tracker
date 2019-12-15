@@ -5,7 +5,7 @@ try:
     py_path = sys.path
     ros_CVpath = '/opt/ros/kinetic/lib/python2.7/dist-packages'
     if py_path[3] == ros_CVpath:
-        print("INFO : ROS and OpenCV are competing")
+        print("[INFO] : ROS and OpenCV are competing")
         sys.path.remove(py_path[3])
 except: pass
 
@@ -20,6 +20,9 @@ except: pass
 
 #setup global
 image_frag = True
+
+global S2G
+S2G = int(460 + 477) #STARTからGOALまでの距離(cm)
 
 class Mouse:
     def __init__(self, window_name, cp_image, org_image):
@@ -48,32 +51,42 @@ class Mouse:
             self.event_call += 1
             M_x = self.mouseEvent["x"]
             M_y = self.mouseEvent["y"]
-            print(M_x, M_y)
             global image_frag
             
+            #1回目のクリック
             if self.event_call == 1:
                 image_frag = True
                 self.ClickedPoint[0] = M_x
                 self.ClickedPoint[1] = M_y
+                print(self.ClickedPoint[0], self.ClickedPoint[1])
                 
                 cv2.circle(self.cp_image, (self.ClickedPoint[0], self.ClickedPoint[1]), 5, (0, 0, 255), -1)
-                cv2.putText(self.cp_image, "START", (self.ClickedPoint[0], self.ClickedPoint[1]), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 1)
+                cv2.putText(self.cp_image, "START", (self.ClickedPoint[0] - 40,
+                                                     self.ClickedPoint[1] - 10),
+                                                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 1)
             
+            #2回目のクリック
             elif self.event_call == 2:
                 self.ClickedPoint[2] = M_x
                 self.ClickedPoint[3] = M_y
+                print(self.ClickedPoint[2], self.ClickedPoint[3])
                 
                 cv2.circle(self.cp_image, (self.ClickedPoint[2], self.ClickedPoint[3]), 5, (0, 255, 0), -1)
-                cv2.putText(self.cp_image, "GOAL", (self.ClickedPoint[2], self.ClickedPoint[3]), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 1)
+                cv2.putText(self.cp_image, "GOAL", (self.ClickedPoint[2] - 40,
+                                                    self.ClickedPoint[3] - 10),
+                                                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 1)
                 
                 #START --> GOAL までの線を引っ張る
-                cv2.line(self.cp_image, (self.ClickedPoint[0], self.ClickedPoint[1]), (self.ClickedPoint[2], self.ClickedPoint[3]),(255, 0, 0), 2)
-                
-            elif self.event_call >= 2:
+                cv2.line(self.cp_image, (self.ClickedPoint[0], self.ClickedPoint[1]),
+                                        (self.ClickedPoint[2], self.ClickedPoint[3]),(255, 0, 0), 2)
+            
+            #それ以降のクリック
+            elif self.event_call > 2:
+                print("Update Image")
                 image_frag = False
                 self.event_call = 0
                 self.cp_image = self.org_image
-                print(self.ClickedPoint)
+
                 self.ClickedPoint = [None, None, None, None]
                 
     def getData(self):
@@ -89,21 +102,30 @@ class Mouse:
         x = self.mouseEvent["x"]
         y = self.mouseEvent["y"]
         return (x, y)
+    
+    #クリックポイント(START, GOAL)のX, Yの4つの値を返す
+    def clicked_point(self):
+        return self.ClickedPoint
 
 
 class HSV_supporter:
     def __init__(self):
         self.t_init     = False
         self.MB         = True
-        self.fill_holes = False #is not working
+        self.fill_holes = False #Not working
         self.opening    = True
         self.closing    = True
-        self.ColorErase = False
-
+        self.ColorErase = False #Not working
+        
         self.kernel = np.ones((8,8),np.uint8)
         
         self.window_name0 = "Serection"
         self.window_name1 = "Frame"
+        
+        self.frame_num = 0
+        self.frame_rate = 30
+        self.frame_time = 1 / self.frame_rate
+        self.N_frame_time = self.frame_num * self.frame_time
 
     #トラックバーの初期設定
     def TBcallback(self, x):
@@ -134,6 +156,7 @@ class HSV_supporter:
         data = np.delete(label[2], 0, 0)
         center = np.delete(label[3], 0, 0)
         maxblob = {}
+        
         if len(data[:, 4]) is 0:
             max_index = None
             maxblob["center"] = [0, 0]
@@ -149,7 +172,7 @@ class HSV_supporter:
         return data, center, maxblob
 
     #データ出力
-    def data_plot(self, data):
+    def data_plot(self, data, K):
         data_np = np.array(data)
         if len(data_np) <= 0:
             print("too many indices for array")
@@ -214,16 +237,22 @@ class HSV_supporter:
         return closing
 
     def color_eraser(self, image, RGBarray):
+        #TODO 特定色の消去する処理
         pass
     #======================================================================
 
     def resize_image(self, img, dsize, X, Y):
         re_image = cv2.resize(img, dsize, fx=X, fy=Y)
         return re_image
+    
+    def px2cm(self, S_x, G_x):
+        px_d = G_x - S_x
+        #1ピクセルあたりの実際の距離
+        K = S2G / px_d
+        return K
 
     #メイン
     def main(self, videofile_path):
-        n = 0
         data = []
         cap = cv2.VideoCapture(videofile_path)
 
@@ -231,15 +260,15 @@ class HSV_supporter:
             self.Trackbars_init()
 
         if cap.isOpened():
-            print("INFO : The Video loaded successfully.")
+            print("[INFO] : The Video loaded successfully.")
         else:
-            print("INFO : LOAD ERROR ***Chack video path or name.***")
+            print("[INFO] : LOAD ERROR *** Chack video path or name ***")
             print("CAP : ", cap)
             exit()
         
         #最初に1フレームだけ表示して、STARTとGOALを選択する
-        print("")
-        print("[INFO] : This is the 1st frame.\n[INFO] : Choose start and goal positions and Click.")
+        print("\n[INFO] : This is the 1st frame.\n[INFO] : Choose start and goal positions and Click.")
+        print("[INFO] : Quit order 'q' Key")
         
         ret, frame0 = cap.read()
         cp_frame0 = frame0.copy()
@@ -247,17 +276,24 @@ class HSV_supporter:
         cv2.namedWindow(self.window_name0)
         mouse = Mouse(self.window_name0, cp_frame0, frame0)
         
+        #STARTとGOALの選択
         while True:
             if image_frag is not True:
                 cp_frame0 = frame0
-                print("change image")
+                print("[INFO] : CLEAR")
                 
             cv2.imshow(self.window_name0, cp_frame0)
+            #print(mouse.clicked_point())
             
             if cv2.waitKey(1) & 0xFF == ord('q'):
+                print("\n[INFO] : Order 'q' key. Step to next step")
+                time.sleep(1)
                 break
 
         cv2.destroyAllWindows()
+        
+        S_x, S_y, G_x, G_y = mouse.clicked_point()
+        K = self.px2cm(S_x, G_x)
         
         #メインのループ
         while(cap.isOpened()):
@@ -295,9 +331,7 @@ class HSV_supporter:
             
             #ノイズ除去のためのアルゴリズム判定(True/False)
             if self.MB is True: mask = self.median_blar(mask, 3)
-            try:
-                if self.fill_holes is True: mask = self.Fill_Holes(mask)
-            except: print("INFO : fill_holes is not working")
+            if self.fill_holes is True: mask = self.Fill_Holes(mask)
             if self.opening is True: mask = self.Opening(mask)
             if self.closing is True: mask = self.Closing(mask)
             if self.ColorErase is True: mask = self.color_eraser(mask, None)
@@ -307,16 +341,16 @@ class HSV_supporter:
             for i in center:
                 cv2.circle(frame, (int(i[0]), int(i[1])), 10, (255, 0, 0),
                             thickness=-3, lineType=cv2.LINE_AA)
-
+            
             center_x = int(maxblob["center"][0])
             center_y = int(maxblob["center"][1])
-
+            
             print(center_x, center_y)
 
             cv2.circle(frame, (center_x, center_y), 30, (0, 200, 0),
                       thickness=3, lineType=cv2.LINE_AA)
 
-            data.append([n, center_x, center_y])
+            data.append([self.frame_num, center_x, center_y])
             
             re_frame=self.resize_image(frame, None, .5, .5)
             cv2.imshow("Frame", re_frame)
@@ -324,9 +358,8 @@ class HSV_supporter:
             mask = self.resize_image(mask, None, .5, .5)
             cv2.imshow("mask image", mask)
             
-            n += 1
-            
-            print("----------")
+            self.frame_num += 1
+            print("-----")
 
             if cv2.waitKey(10) & 0xFF == ord('q'):
                 break
@@ -334,10 +367,9 @@ class HSV_supporter:
         cap.release()
         cv2.destroyAllWindows()
 
-        self.data_plot(data)
+        self.data_plot(data, K)
 
 if __name__ == '__main__':
-
     video = "20191122/nihongi_f_l1.mp4"
     if len(sys.argv) < 2:
         videofile_path = video

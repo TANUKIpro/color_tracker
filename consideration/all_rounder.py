@@ -123,7 +123,7 @@ class HSV_supporter:
         self.window_name1 = "Frame"
         
         self.frame_num    = 0                     # 全体のフレーム数
-        self.frame_rate   = 30                    # fps
+        self.frame_rate   = 30                    # 入力動画のfps
         self.frame_time   = 1 / self.frame_rate   # 単位フレームあたりの時間
         self.N_frame_time = 0                     # Nフレーム時の時間
         self.velocity     = 0                     # 瞬間の速度
@@ -186,34 +186,46 @@ class HSV_supporter:
             x = data_np[:,1]
             y = data_np[:,2]
             t = data_np[:,3]
+            
         #xの勾配dxを求める
         dx = np.gradient(x)
+        #瞬間の速度を計算
         Velocity = dx * (1 / 100) / self.frame_time
-        plt.rcParams["font.family"] = "Times New Roman"
         
-        fig, (axL, axR) = plt.subplots(ncols=2, sharex="none", figsize=(10,4))
+        #plt.rcParams["font.family"] = "Times New Roman"
+        fig, (axL, axR) = plt.subplots(ncols = 2, sharex = "none", figsize = (10,4))
+        fig.suptitle("VIDEO PATH : " + VideoName)
         
         #1つ目のグラフ描画
-        axL.plot(f, x, "r-", linewidth=2, label = "x")
-        axL.plot(f, y, "g-", linewidth=2, label = "y")
-        axL.set_title('Frame - Pixel')
+        axL.plot(f, x, "r-", linewidth=1.5, label = "x")
+        axL.plot(f, y, "g-", linewidth=1.5, label = "y")
+        axL.legend(fontsize=7,
+                   frameon=True,
+                   facecolor="lightgreen")
+        axL.set_title('< Frame - Pixel >')
         axL.set_xlabel('frame[mai]')
         axL.set_ylabel('Position[px]')
         axL.grid(True)
 
         #2つ目のグラフ描画
-        axR.plot(t, Velocity, "b-", linewidth=2, label = "Velocity")
-        axR.set_title('Time - Velocity')
+        axR.plot(t, Velocity, "b-", linewidth=1.5, label = "Velocity")
+        axR.legend(fontsize=7,
+                   frameon=True,
+                   facecolor="lightgreen")
+        axR.set_title('< Time - Velocity >')
         axR.set_xlabel('Time[sec]')
         axR.set_ylabel('Velocity[m/sec]')
         axR.set_ylim(-1, 5)
         axR.grid(True)
-
-        plt.legend(loc=1, fontsize=16)
-        plt.tight_layout()
-        #plt.title(VideoName)
-        #plt.subplots_adjust(top=0.9)
+        
+        
+        fig.tight_layout()
+        fig.subplots_adjust(top=0.85)
         plt.show()
+        
+        #データのセーブ
+        sNAME = VideoName.strip('.mp4') + '.png'
+        fig.savefig(sNAME)
 
     #トラックバーからコールバックを受け取り、値を返す
     def trackbars(self):
@@ -294,7 +306,7 @@ class HSV_supporter:
             
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 print("\n[INFO] : Order 'q' key. Proceed to the next step!")
-                time.sleep(.5)
+                time.sleep(.2)
                 break
 
         cv2.destroyAllWindows()
@@ -305,7 +317,7 @@ class HSV_supporter:
         
         print("[INFO] : Distance from the START to the GOAL is {0} pixel".format(G_x - S_x))
         print("[INFO] : So {0}(cm) is calculated as {1} pixcel".format(S2G, G_x - S_x))
-        time.sleep(1)
+        time.sleep(.2)
         
         #メインのループ
         while(cap.isOpened()):

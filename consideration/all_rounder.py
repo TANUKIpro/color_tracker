@@ -84,9 +84,9 @@ class Mouse:
             elif self.event_call > 2:
                 print("Update Image")
                 image_frag = False
+                #クリック回数と座標のリセット
                 self.event_call = 0
                 self.cp_image = self.org_image
-
                 self.ClickedPoint = [None, None, None, None]
                 
     def getData(self):
@@ -122,10 +122,11 @@ class HSV_supporter:
         self.window_name0 = "Serection"
         self.window_name1 = "Frame"
         
-        self.frame_num = 0
-        self.frame_rate = 30
-        self.frame_time = 1 / self.frame_rate
-        self.N_frame_time = self.frame_num * self.frame_time
+        self.frame_num    = 0                     # 全体のフレーム数
+        self.frame_rate   = 30                    # fps
+        self.frame_time   = 1 / self.frame_rate   # 単位フレームあたりの時間
+        self.N_frame_time = 0                     # Nフレーム時の時間
+        self.velocity     = 0                     # 瞬間の速度
 
     #トラックバーの初期設定
     def TBcallback(self, x):
@@ -172,39 +173,46 @@ class HSV_supporter:
         return data, center, maxblob
 
     #データ出力
-    def data_plot(self, data, K):
+    def data_plot(self, data, VideoName):
         data_np = np.array(data)
         if len(data_np) <= 0:
             print("too many indices for array")
             f = 0
             x = 0
             y = 0
+            t = 0
         else:
             f = data_np[:,0]
             x = data_np[:,1]
             y = data_np[:,2]
-
+            t = data_np[:,3]
         #xの勾配dxを求める
         dx = np.gradient(x)
-
+        Velocity = dx * (1 / 100) / self.frame_time
         plt.rcParams["font.family"] = "Times New Roman"
-
+        
+        fig, (axL, axR) = plt.subplots(ncols=2, sharex="none", figsize=(10,4))
+        
         #1つ目のグラフ描画
-        plt.subplot(1,2,1)
-        plt.plot(f, x, "r-", label="x")
-        plt.plot(f, y, "b-", label="y")
-        plt.xlabel("Frame [num]", fontsize=16)
-        plt.ylabel("Position[px]", fontsize=16)
-        plt.grid(True)
+        axL.plot(f, x, "r-", linewidth=2, label = "x")
+        axL.plot(f, y, "g-", linewidth=2, label = "y")
+        axL.set_title('Frame - Pixel')
+        axL.set_xlabel('frame[mai]')
+        axL.set_ylabel('Position[px]')
+        axL.grid(True)
 
         #2つ目のグラフ描画
-        plt.subplot(1,2,2)
-        plt.plot(f, dx, "g-", label="dx")
-        plt.xlabel("Frame [num]", fontsize=16)
-        plt.ylabel("Position[px]", fontsize=16)
-        plt.grid(True)
+        axR.plot(t, Velocity, "b-", linewidth=2, label = "Velocity")
+        axR.set_title('Time - Velocity')
+        axR.set_xlabel('Time[sec]')
+        axR.set_ylabel('Velocity[m/sec]')
+        axR.set_ylim(-1, 5)
+        axR.grid(True)
 
         plt.legend(loc=1, fontsize=16)
+        plt.tight_layout()
+        #plt.title(VideoName)
+        #plt.subplots_adjust(top=0.9)
         plt.show()
 
     #トラックバーからコールバックを受け取り、値を返す
@@ -277,23 +285,27 @@ class HSV_supporter:
         mouse = Mouse(self.window_name0, cp_frame0, frame0)
         
         #STARTとGOALの選択
-        while True:
+        while(cap.isOpened()):
             if image_frag is not True:
                 cp_frame0 = frame0
                 print("[INFO] : CLEAR")
                 
             cv2.imshow(self.window_name0, cp_frame0)
-            #print(mouse.clicked_point())
             
             if cv2.waitKey(1) & 0xFF == ord('q'):
-                print("\n[INFO] : Order 'q' key. Step to next step")
-                time.sleep(1)
+                print("\n[INFO] : Order 'q' key. Proceed to the next step!")
+                time.sleep(.5)
                 break
 
         cv2.destroyAllWindows()
         
+        #マウス座標のアンパックとピクセルから距離の割り出し
         S_x, S_y, G_x, G_y = mouse.clicked_point()
         K = self.px2cm(S_x, G_x)
+        
+        print("[INFO] : Distance from the START to the GOAL is {0} pixel".format(G_x - S_x))
+        print("[INFO] : So {0}(cm) is calculated as {1} pixcel".format(S2G, G_x - S_x))
+        time.sleep(1)
         
         #メインのループ
         while(cap.isOpened()):
@@ -302,11 +314,9 @@ class HSV_supporter:
                 print("frame is None")
                 break
 
-            #画像の認識範囲を狭めるためのトリミング操作
-            """
+            #最初の処理で指定したSTARTとGOALに合わせてトリミングする
             h, w = frame.shape[:2]
-            frame = frame[80:h, 0:w]
-            """
+            frame = frame[:, S_x:G_x]
 
             hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
@@ -338,6 +348,8 @@ class HSV_supporter:
 
             _, center, maxblob = self.analysis_blob(mask)
             #print("target num:",len(center))
+            
+            #ラベル付けされたブロブに円を描画
             for i in center:
                 cv2.circle(frame, (int(i[0]), int(i[1])), 10, (255, 0, 0),
                             thickness=-3, lineType=cv2.LINE_AA)
@@ -349,16 +361,20 @@ class HSV_supporter:
 
             cv2.circle(frame, (center_x, center_y), 30, (0, 200, 0),
                       thickness=3, lineType=cv2.LINE_AA)
-
-            data.append([self.frame_num, center_x, center_y])
+            
+            #表示する用のデータのトリミング
+            if S_x <= center_x <= G_x:
+                data.append([self.frame_num, center_x, center_y, self.N_frame_time])
+                
+                self.N_frame_time = self.frame_time * self.frame_num
+                self.frame_num += 1
             
             re_frame=self.resize_image(frame, None, .5, .5)
-            cv2.imshow("Frame", re_frame)
+            cv2.imshow(self.window_name1, re_frame)
             
             mask = self.resize_image(mask, None, .5, .5)
             cv2.imshow("mask image", mask)
             
-            self.frame_num += 1
             print("-----")
 
             if cv2.waitKey(10) & 0xFF == ord('q'):
@@ -367,7 +383,7 @@ class HSV_supporter:
         cap.release()
         cv2.destroyAllWindows()
 
-        self.data_plot(data, K)
+        self.data_plot(data, videofile_path)
 
 if __name__ == '__main__':
     video = "20191122/nihongi_f_l1.mp4"

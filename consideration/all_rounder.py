@@ -25,11 +25,12 @@ global S2G
 S2G = int(460 + 477) #STARTからGOALまでの距離(cm)
 
 class Mouse:
-    def __init__(self, window_name, cp_image, org_image):
+    def __init__(self, window_name, cp_image, org_image, HumanHeight):
         self.cp_image     = cp_image
         self.org_image    = org_image
         self.event_call   = 0
         self.ClickedPoint = [None, None, None, None]
+        self.Prediction   = [None, None, None, None]
         
         self.mouseEvent   = {"x":None, "y":None, "event":None, "flags":None}
         #cv2.setMouseCallback(window_name, self.__NORMALCallBack, None)
@@ -63,7 +64,7 @@ class Mouse:
                 cv2.circle(self.cp_image, (self.ClickedPoint[0], self.ClickedPoint[1]), 5, (0, 0, 255), -1)
                 cv2.putText(self.cp_image, "START", (self.ClickedPoint[0] - 40,
                                                      self.ClickedPoint[1] - 10),
-                                                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 1)
+                                                     cv2.FONT_HERSHEY_SIMPLEX, 1., (0, 0, 255), 2, cv2.LINE_AA)
             
             #2回目のクリック
             elif self.event_call == 2:
@@ -74,20 +75,37 @@ class Mouse:
                 cv2.circle(self.cp_image, (self.ClickedPoint[2], self.ClickedPoint[3]), 5, (0, 255, 0), -1)
                 cv2.putText(self.cp_image, "GOAL", (self.ClickedPoint[2] - 40,
                                                     self.ClickedPoint[3] - 10),
-                                                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 1)
+                                                    cv2.FONT_HERSHEY_SIMPLEX, 1., (0, 255, 0), 2, cv2.LINE_AA)
                 
                 #START --> GOAL までの線を引っ張る
                 cv2.line(self.cp_image, (self.ClickedPoint[0], self.ClickedPoint[1]),
                                         (self.ClickedPoint[2], self.ClickedPoint[3]),(255, 0, 0), 2)
+                
+                #TODO トラッキング範囲を推定。被験者の身長から割り出す <-- この処理本当に必要ぉ??
+                S_x = self.ClickedPoint[0]
+                S_y = self.ClickedPoint[1]
+                G_x = self.ClickedPoint[2]
+                G_y = self.ClickedPoint[3]
+
+                #後の処理で同じことする。書いたやつアホ
+                #単位ピクセルあたりの実際の距離を算出して、Y軸に減算
+                px_d = G_x - S_x
+                K    = S2G / px_d
+                S2H  = HumanHeight / K
+                #描画
+                cv2.line(self.cp_image, (S_x, int(S_y - S2H)), (G_x, int(G_y - S2H)),(70, 220, 140), 2)
+                self.Prediction   = [S_x, int(S_y - S2H), G_x, int(G_y - S2H)]
             
             #それ以降のクリック
             elif self.event_call > 2:
                 print("Update Image")
                 image_frag = False
-                #クリック回数と座標のリセット
+                
+                #クリック回数、イメージに描いた線、マウス座標のリセット
                 self.event_call = 0
                 self.cp_image = self.org_image
                 self.ClickedPoint = [None, None, None, None]
+                self.Prediction   = [None, None, None, None]
                 
     def getData(self):
         return self.mouseEvent
@@ -99,14 +117,13 @@ class Mouse:
         return self.mouseEvent["flags"]
 
     def posXY(self):
-        x = self.mouseEvent["x"]
-        y = self.mouseEvent["y"]
-        return (x, y)
+        return (self.mouseEvent["x"], self.mouseEvent["y"])
     
-    #クリックポイント(START, GOAL)のX, Yの4つの値を返す
     def clicked_point(self):
         return self.ClickedPoint
-
+        
+    def Prediction(self):
+        return self.Prediction
 
 class HSV_supporter:
     def __init__(self):
@@ -276,11 +293,11 @@ class HSV_supporter:
     def px2cm(self, S_x, G_x):
         px_d = G_x - S_x
         #単位ピクセルあたりの実際の距離
-        self.K = S2G / px_d
-        return self.K
+        K = S2G / px_d
+        return K
 
     #メイン
-    def main(self, videofile_path):
+    def main(self, videofile_path, HumanHeight):
         data = []
         cap = cv2.VideoCapture(videofile_path)
 
@@ -302,13 +319,13 @@ class HSV_supporter:
         cp_frame0 = frame0.copy()
         
         cv2.namedWindow(self.window_name0)
-        mouse = Mouse(self.window_name0, cp_frame0, frame0)
+        mouse = Mouse(self.window_name0, cp_frame0, frame0, HumanHeight)
         
         #STARTとGOALの選択
         while(cap.isOpened()):
             if image_frag is not True:
                 cp_frame0 = frame0
-                print("[INFO] : CLEAR")
+                #print("[INFO] : CLEAR")
                 
             cv2.imshow(self.window_name0, cp_frame0)
             
@@ -320,8 +337,11 @@ class HSV_supporter:
         cv2.destroyAllWindows()
         
         #マウス座標のアンパックとピクセルから距離の割り出し
-        S_x, S_y, G_x, G_y = mouse.clicked_point()
+        S_x,  S_y,  G_x,  G_y  = mouse.clicked_point()
+        Ps_x, Ps_y, Pg_x, Pg_y = mouse.Prediction()
         self.K = self.px2cm(S_x, G_x)
+        #TODO 頭のトラッキング位置を推定して画像に描画した線を配列にしてデータをプロットする。
+        #配列にするには、スタートからゴールまでのX座標を相対距離ピクセルで割れば分割できる。numpyで分割できるかもかも
         
         print("[INFO] : Distance from the START to the GOAL is {0} pixel".format(G_x - S_x))
         print("[INFO] : So {0}(cm) is calculated as {1} pixcel".format(S2G, G_x - S_x))
@@ -370,7 +390,8 @@ class HSV_supporter:
             _, center, maxblob = self.analysis_blob(mask)
             #print("target num:",len(center))
             
-            #ラベル付けされたブロブに円を描画
+            #見つけた領域にとりあえず円を描画してみる
+            #ちょい重いから、マシンスペックに応じてコメントアウトしとくといいかも
             for i in center:
                 cv2.circle(frame, (int(i[0]), int(i[1])), 10, (255, 0, 0),
                             thickness=-3, lineType=cv2.LINE_AA)
@@ -379,7 +400,8 @@ class HSV_supporter:
             self.center_y = int(maxblob["center"][1])
             
             print(self.center_x, self.center_y)
-
+            
+            #ラベル付けされたブロブに円を描画
             cv2.circle(frame, (self.center_x, self.center_y), 30, (0, 200, 0),
                       thickness=3, lineType=cv2.LINE_AA)
             
@@ -409,13 +431,18 @@ class HSV_supporter:
         self.data_plot(data, videofile_path)
 
 if __name__ == '__main__':
-    #入力動画のパス
-    video = "20191122/nihongi_f_l1.mp4"
-    if len(sys.argv) < 2:
-        videofile_path = video
-    else:
+    if len(sys.argv) == 1:
+        videofile_path = "20191122/nihongi_f_l1.mp4"
+        HumanHeight     = 165.0
+        
+    elif len(sys.argv) == 2:
         videofile_path = sys.argv[1]
+        HumanHeight     = 165.0
+        
+    elif len(sys.argv) == 3:
+        videofile_path = sys.argv[1]
+        HumanHeight     = sys.argv[2]
 
     hsv_sup = HSV_supporter()
-    hsv_sup.main(videofile_path)
+    hsv_sup.main(videofile_path, HumanHeight)
     

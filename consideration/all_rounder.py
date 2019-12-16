@@ -119,9 +119,13 @@ class HSV_supporter:
         
         self.kernel = np.ones((8,8),np.uint8)
         
+        self.center_x = 0
+        self.center_y = 0
+        
         self.window_name0 = "Serection"
         self.window_name1 = "Frame"
         
+        self.K            = 0                     # 単位ピクセルあたりの実際の距離(cm)
         self.frame_num    = 0                     # 全体のフレーム数
         self.frame_rate   = 30                    # 入力動画のfps
         self.frame_time   = 1 / self.frame_rate   # 単位フレームあたりの時間
@@ -187,8 +191,10 @@ class HSV_supporter:
             y = data_np[:,2]
             t = data_np[:,3]
             
+        #ピクセル --> 距離(cm)に変換
+        real_x = self.K * x
         #xの勾配dxを求める
-        dx = np.gradient(x)
+        dx = np.gradient(real_x)
         #瞬間の速度を計算
         Velocity = dx * (1 / 100) / self.frame_time
         
@@ -202,6 +208,7 @@ class HSV_supporter:
         axL.legend(fontsize=7,
                    frameon=True,
                    facecolor="lightgreen")
+                   
         axL.set_title('< Frame - Pixel >')
         axL.set_xlabel('frame[mai]')
         axL.set_ylabel('Position[px]')
@@ -212,6 +219,7 @@ class HSV_supporter:
         axR.legend(fontsize=7,
                    frameon=True,
                    facecolor="lightgreen")
+                   
         axR.set_title('< Time - Velocity >')
         axR.set_xlabel('Time[sec]')
         axR.set_ylabel('Velocity[m/sec]')
@@ -267,9 +275,9 @@ class HSV_supporter:
     
     def px2cm(self, S_x, G_x):
         px_d = G_x - S_x
-        #1ピクセルあたりの実際の距離
-        K = S2G / px_d
-        return K
+        #単位ピクセルあたりの実際の距離
+        self.K = S2G / px_d
+        return self.K
 
     #メイン
     def main(self, videofile_path):
@@ -286,7 +294,7 @@ class HSV_supporter:
             print("CAP : ", cap)
             exit()
         
-        #最初に1フレームだけ表示して、STARTとGOALを選択する
+        #最初の1フレームだけ表示して、STARTとGOALを選択する
         print("\n[INFO] : This is the 1st frame.\n[INFO] : Choose start and goal positions and Click.")
         print("[INFO] : Quit order 'q' Key")
         
@@ -313,10 +321,11 @@ class HSV_supporter:
         
         #マウス座標のアンパックとピクセルから距離の割り出し
         S_x, S_y, G_x, G_y = mouse.clicked_point()
-        K = self.px2cm(S_x, G_x)
+        self.K = self.px2cm(S_x, G_x)
         
         print("[INFO] : Distance from the START to the GOAL is {0} pixel".format(G_x - S_x))
         print("[INFO] : So {0}(cm) is calculated as {1} pixcel".format(S2G, G_x - S_x))
+        print("[INFO] : K is ", self.K)
         time.sleep(.2)
         
         #メインのループ
@@ -366,25 +375,27 @@ class HSV_supporter:
                 cv2.circle(frame, (int(i[0]), int(i[1])), 10, (255, 0, 0),
                             thickness=-3, lineType=cv2.LINE_AA)
             
-            center_x = int(maxblob["center"][0])
-            center_y = int(maxblob["center"][1])
+            self.center_x = int(maxblob["center"][0])
+            self.center_y = int(maxblob["center"][1])
             
-            print(center_x, center_y)
+            print(self.center_x, self.center_y)
 
-            cv2.circle(frame, (center_x, center_y), 30, (0, 200, 0),
+            cv2.circle(frame, (self.center_x, self.center_y), 30, (0, 200, 0),
                       thickness=3, lineType=cv2.LINE_AA)
             
             #表示する用のデータのトリミング
-            if S_x <= center_x <= G_x:
-                data.append([self.frame_num, center_x, center_y, self.N_frame_time])
+            if S_x <= self.center_x <= G_x:
+                data.append([self.frame_num, self.center_x, self.center_y, self.N_frame_time])
                 
                 self.N_frame_time = self.frame_time * self.frame_num
                 self.frame_num += 1
+            else:
+                continue
             
-            re_frame=self.resize_image(frame, None, .5, .5)
+            re_frame=self.resize_image(frame, None, .8, .8)
             cv2.imshow(self.window_name1, re_frame)
             
-            mask = self.resize_image(mask, None, .5, .5)
+            mask = self.resize_image(mask, None, .8, .8)
             cv2.imshow("mask image", mask)
             
             print("-----")
@@ -398,6 +409,7 @@ class HSV_supporter:
         self.data_plot(data, videofile_path)
 
 if __name__ == '__main__':
+    #入力動画のパス
     video = "20191122/nihongi_f_l1.mp4"
     if len(sys.argv) < 2:
         videofile_path = video

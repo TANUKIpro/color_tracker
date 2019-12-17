@@ -24,6 +24,14 @@ image_frag = True
 global S2G
 S2G = int(460 + 477) #STARTからGOALまでの距離(cm)
 
+"""
+class FromPoint2point:
+    def __init__(self, x, x1, x2, y1, y2)
+        pass
+    def P2P_calc(x, x1, x2, y1, y2):
+        fx = (((y2 - y1) / x2 - x1) * (x - x1)) + y1
+        return fx 
+"""
 class Mouse:
     def __init__(self, window_name, cp_image, org_image, HumanHeight):
         self.cp_image     = cp_image
@@ -93,8 +101,11 @@ class Mouse:
                 K    = S2G / px_d
                 S2H  = HumanHeight / K
                 #描画
-                cv2.line(self.cp_image, (S_x, int(S_y - S2H)), (G_x, int(G_y - S2H)),(70, 220, 140), 2)
-                self.Prediction   = [S_x, int(S_y - S2H), G_x, int(G_y - S2H)]
+                HS_y = int(S_y - S2H)
+                HG_y = int(G_y - S2H)
+                cv2.line(self.cp_image, (S_x, HS_y), (G_x, HG_y),(70, 220, 140), 2)
+                self.Prediction = [S_x, HS_y, G_x, HG_y]
+                print(self.Prediction)
             
             #それ以降のクリック
             elif self.event_call > 2:
@@ -209,11 +220,19 @@ class HSV_supporter:
             t = data_np[:,3]
             
         #ピクセル --> 距離(cm)に変換
-        real_x = self.K * x
-        #xの勾配dxを求める
-        dx = np.gradient(real_x)
+        real_x = (self.K * x) * (1 / 100)
+        real_y = (self.K * y) * (1 / 100)
+        
+        #フレームN --> フレームN+1 までの間に移動した微小距離dxの計算
+        #x[1:]-x[:-1] で隣接する要素の引き算ができる
+        diff_real_x = real_x[1:] - real_x[:-1]
+        diff_real_y = real_y[1:] - real_y[:-1]
+        
+        #隣接するフレーム間の相対的な二次元の微小距離を算出
+        dx = np.sqrt(diff_real_x**2 + diff_real_y**2)
+
         #瞬間の速度を計算
-        Velocity = dx * (1 / 100) / self.frame_time
+        Velocity = dx / self.frame_time
         
         #plt.rcParams["font.family"] = "Times New Roman"
         fig, (axL, axR) = plt.subplots(ncols = 2, sharex = "none", figsize = (10,4))
@@ -232,7 +251,7 @@ class HSV_supporter:
         axL.grid(True)
 
         #2つ目のグラフ描画
-        axR.plot(t, Velocity, "b-", linewidth=1.5, label = "Velocity")
+        axR.plot(t[1:], Velocity, "b-", linewidth=1.5, label = "Velocity")
         axR.legend(fontsize=7,
                    frameon=True,
                    facecolor="lightgreen")
@@ -240,7 +259,7 @@ class HSV_supporter:
         axR.set_title('< Time - Velocity >')
         axR.set_xlabel('Time[sec]')
         axR.set_ylabel('Velocity[m/sec]')
-        axR.set_ylim(-1, 5)
+        axR.set_ylim(-0.5,  4)
         axR.grid(True)
         
         
@@ -290,8 +309,8 @@ class HSV_supporter:
         re_image = cv2.resize(img, dsize, fx=X, fy=Y)
         return re_image
     
-    def px2cm(self, S_x, G_x):
-        px_d = G_x - S_x
+    def px2cm(self, S_x, S_y, G_x, G_y):
+        px_d = np.sqrt((S_x - G_x)**2 + (S_y + G_y)**2)
         #単位ピクセルあたりの実際の距離
         K = S2G / px_d
         return K
@@ -337,13 +356,13 @@ class HSV_supporter:
         cv2.destroyAllWindows()
         
         #マウス座標のアンパックとピクセルから距離の割り出し
-        S_x,  S_y,  G_x,  G_y  = mouse.clicked_point()
-        Ps_x, Ps_y, Pg_x, Pg_y = mouse.Prediction()
-        self.K = self.px2cm(S_x, G_x)
+        S_x, S_y, G_x, G_y = mouse.clicked_point()
+        self.K = self.px2cm(S_x, S_y, G_x, G_y)
         #TODO 頭のトラッキング位置を推定して画像に描画した線を配列にしてデータをプロットする。
         #配列にするには、スタートからゴールまでのX座標を相対距離ピクセルで割れば分割できる。numpyで分割できるかもかも
+        #Ps_x, Ps_y, Pg_x, Pg_y = mouse.Prediction()
         
-        print("[INFO] : Distance from the START to the GOAL is {0} pixel".format(G_x - S_x))
+        print("[INFO] : Distance from START to GOAL is {0} pixel".format(G_x - S_x))
         print("[INFO] : So {0}(cm) is calculated as {1} pixcel".format(S2G, G_x - S_x))
         print("[INFO] : K is ", self.K)
         time.sleep(.2)

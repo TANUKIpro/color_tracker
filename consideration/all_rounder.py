@@ -24,14 +24,6 @@ image_frag = True
 global S2G
 S2G = int(460 + 477) #STARTからGOALまでの距離(cm)
 
-"""
-class FromPoint2point:
-    def __init__(self, x, x1, x2, y1, y2)
-        pass
-    def P2P_calc(x, x1, x2, y1, y2):
-        fx = (((y2 - y1) / x2 - x1) * (x - x1)) + y1
-        return fx
-"""
 class Mouse:
     def __init__(self, window_name, cp_image, org_image, HumanHeight):
         self.cp_image     = cp_image
@@ -89,14 +81,14 @@ class Mouse:
                 cv2.line(self.cp_image, (self.ClickedPoint[0], self.ClickedPoint[1]),
                                         (self.ClickedPoint[2], self.ClickedPoint[3]),(255, 0, 0), 2)
 
-                #TODO トラッキング範囲を推定。被験者の身長から割り出す <-- この処理本当に必要ぉ??
+                #トラッキング範囲を推定。被験者の身長から割り出す <-- この処理本当に必要ぉ??
                 S_x = self.ClickedPoint[0]
                 S_y = self.ClickedPoint[1]
                 G_x = self.ClickedPoint[2]
                 G_y = self.ClickedPoint[3]
 
                 #後の処理で同じことする。書いたやつアホ
-                #単位ピクセルあたりの実際の距離を算出して、Y軸に減算
+                #単位ピクセルあたりの実際の距離を算出して、Y軸から減算
                 px_d = G_x - S_x
                 K    = S2G / px_d
                 S2H  = HumanHeight / K
@@ -234,7 +226,6 @@ class HSV_supporter:
         #瞬間の速度を計算
         Velocity = dx / self.frame_time
 
-        #plt.rcParams["font.family"] = "Times New Roman"
         fig, (axL, axR) = plt.subplots(ncols = 2, sharex = "none", figsize = (10,4))
         fig.suptitle("VIDEO PATH : " + VideoName)
 
@@ -313,6 +304,20 @@ class HSV_supporter:
         #単位ピクセルあたりの実際の距離
         K = S2G / px_d
         return K
+        
+    #リストからある値に最も近い値を返却する関数
+    def getNearestValue(self, array, num):
+        """
+        @param array: データ配列
+        @param num: 対象値
+        @return 対象値に最も近い値
+        """
+        #リスト要素と対象値の差分を計算し最小値のインデックスを取得
+        if bool(array[0]):
+            idx = np.abs(np.asarray(array) - num).argmin()
+            return array[idx]
+        else:
+            print("array is None!")
 
     #メイン
     def main(self, videofile_path, HumanHeight):
@@ -357,10 +362,14 @@ class HSV_supporter:
         #マウス座標のアンパックとピクセルから距離の割り出し
         S_x, S_y, G_x, G_y = mouse.clicked_point()
         self.K = self.px2cm(S_x, S_y, G_x, G_y)
-        #TODO 頭のトラッキング位置を推定して画像に描画した線を配列にし、データをプロットする。
-        #配列にするには、スタートからゴールまでのX座標をピクセルで割れば分割できる。numpyで分割できるかもかも
+        
+        #頭のトラッキング位置を推定して画像に描画した線を配列にする
         Ps_x, Ps_y, Pg_x, Pg_y = mouse.prediction()
-
+        HP_dx = Pg_x - Ps_x
+        HP_dy = Pg_y - Ps_y
+        HeadPointArray_x = np.linspace(Ps_x, Pg_x, HP_dx, dtype=np.int32)
+        HeadPointArray_y = np.linspace(Ps_y, Pg_y, HP_dx, dtype=np.int32)
+        
         print("[INFO] : Distance from START to GOAL is {0} pixel".format(G_x - S_x))
         print("[INFO] : So {0}(cm) is calculated as {1} pixcel".format(S2G, G_x - S_x))
         print("[INFO] : K is ", self.K)
@@ -413,16 +422,24 @@ class HSV_supporter:
             for i in center:
                 cv2.circle(frame, (int(i[0]), int(i[1])), 10, (255, 0, 0),
                             thickness=-3, lineType=cv2.LINE_AA)
-
+            
             self.center_x = int(maxblob["center"][0])
             self.center_y = int(maxblob["center"][1])
 
-            print(self.center_x, self.center_y)
-
+            #TODO フレームごとに、予測線から最も近いブロブを解析する
+            min_HP = self.getNearestValue(center, [HeadPointArray_x[self.frame_num],
+                                                   HeadPointArray_y[self.frame_num]])
+            if bool(min_HP):
+                cv2.circle(frame, (min_HP[0], min_HP[1]), 30, (0, 0, 255),
+                      thickness=3, lineType=cv2.LINE_AA)
+            else:
+                pass
+            
             #ラベル付けされたブロブに円を描画
+            """
             cv2.circle(frame, (self.center_x, self.center_y), 30, (0, 200, 0),
                       thickness=3, lineType=cv2.LINE_AA)
-
+            """
             #表示する用のデータのトリミング
             if S_x <= self.center_x <= G_x:
                 data.append([self.frame_num, self.center_x, self.center_y, self.N_frame_time])
@@ -432,15 +449,17 @@ class HSV_supporter:
             else:
                 continue
 
-            re_frame=self.resize_image(frame, None, .8, .8)
-            cv2.imshow(self.window_name1, re_frame)
+            cv2.imshow("first frame", cp_frame0)
+            
+            #frame=self.resize_image(frame, None, .8, .8)
+            cv2.imshow(self.window_name1, frame)
 
             mask = self.resize_image(mask, None, .8, .8)
             cv2.imshow("mask image", mask)
 
             print("-----")
 
-            if cv2.waitKey(10) & 0xFF == ord('q'):
+            if cv2.waitKey(1000) & 0xFF == ord('q'):
                 break
 
         cap.release()

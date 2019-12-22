@@ -19,6 +19,7 @@ try:
 except: pass
 
 #setup global
+print("小池くんの作ったプログラムだよ。クソだよ。")
 image_frag = True
 
 global S2G
@@ -99,16 +100,16 @@ class Mouse:
                 self.Prediction = [S_x, HS_y, G_x, HG_y]
                 print("[Prediction array] : ", self.Prediction)
 
-            #それ以降のクリック
+            #2回目以降のクリック
             elif self.event_call > 2:
                 print("Update Image")
                 image_frag = False
 
-                #クリック回数、イメージに描いた線、マウス座標のリセット
-                self.event_call = 0
+                #クリック回数、イメージに描いた線、マウス座標をリセット
                 self.cp_image = self.org_image
                 self.ClickedPoint = [None, None, None, None]
                 self.Prediction   = [None, None, None, None]
+                self.event_call = 0
 
     def getData(self):
         return self.mouseEvent
@@ -144,6 +145,7 @@ class HSV_supporter:
 
         self.window_name0 = "Serection"
         self.window_name1 = "Frame"
+        self.min_HP       = []
 
         self.K            = 0                     # 単位ピクセルあたりの実際の距離(cm)
         self.frame_num    = 0                     # 全体のフレーム数
@@ -196,7 +198,7 @@ class HSV_supporter:
 
         return data, center, maxblob
 
-    #データ出力
+    #グラフ出力
     def data_plot(self, data, VideoName):
         data_np = np.array(data)
         if len(data_np) <= 0:
@@ -220,7 +222,7 @@ class HSV_supporter:
         diff_real_x = real_x[1:] - real_x[:-1]
         diff_real_y = real_y[1:] - real_y[:-1]
 
-        #隣接するフレーム間の相対的な二次元空間の微小距離を算出
+        #隣接するフレーム間の相対的な二次元空間の微小距離dxを算出
         dx = np.sqrt(diff_real_x**2 + diff_real_y**2)
 
         #瞬間の速度を計算
@@ -305,21 +307,22 @@ class HSV_supporter:
         K = S2G / px_d
         return K
         
-    #リストからある値に最も近い値を返却する関数
+    #特定のリストから、指定値に最も近い値の格納場所を返す関数
     def getNearestValue(self, array, num):
         """
         @param array: データ配列
         @param num: 対象値
         @return 対象値に最も近い値
         """
-        #リスト要素と対象値の差分を計算し最小値のインデックスを取得
-        if bool(array[0]):
+        #print(array)
+        if len(array) > 0:
+            print("array:{0}, num:{1}".format(array, num))
             idx = np.abs(np.asarray(array) - num).argmin()
-            return array[idx]
+            print(idx)
+            return(array[idx])
         else:
-            print("array is None!")
+            pass
 
-    #メイン
     def main(self, videofile_path, HumanHeight):
         data = []
         cap = cv2.VideoCapture(videofile_path)
@@ -334,7 +337,7 @@ class HSV_supporter:
             print("CAP : ", cap)
             exit()
 
-        #最初の1フレームだけ表示して、STARTとGOALを選択する
+        #最初の1フレームだけ表示して、STARTとGOALを選択させる
         print("\n[INFO] : This is the 1st frame.\n[INFO] : Choose start and goal positions and Click.")
         print("[INFO] : Quit order 'q' Key")
 
@@ -348,7 +351,6 @@ class HSV_supporter:
         while(cap.isOpened()):
             if image_frag is not True:
                 cp_frame0 = frame0
-                #print("[INFO] : CLEAR")
 
             cv2.imshow(self.window_name0, cp_frame0)
 
@@ -367,6 +369,7 @@ class HSV_supporter:
         Ps_x, Ps_y, Pg_x, Pg_y = mouse.prediction()
         HP_dx = Pg_x - Ps_x
         HP_dy = Pg_y - Ps_y
+        #ピクセルの座標はint型
         HeadPointArray_x = np.linspace(Ps_x, Pg_x, HP_dx, dtype=np.int32)
         HeadPointArray_y = np.linspace(Ps_y, Pg_y, HP_dx, dtype=np.int32)
         
@@ -381,7 +384,7 @@ class HSV_supporter:
             if frame is None:
                 print("frame is None")
                 break
-
+            
             #最初の処理で指定したSTARTとGOALに合わせてトリミングする
             h, w = frame.shape[:2]
             frame = frame[:, S_x:G_x]
@@ -418,28 +421,38 @@ class HSV_supporter:
             #print("target num:",len(center))
 
             #見つけた領域にとりあえず円を描画してみる
-            #ちょい重いから、マシンスペックに応じてコメントアウトしとくといいかも
+            #ちょい重いから、マシンスペックに応じてコメントアウトするといいかも
             for i in center:
                 cv2.circle(frame, (int(i[0]), int(i[1])), 10, (255, 0, 0),
                             thickness=-3, lineType=cv2.LINE_AA)
             
+            #ブロブ解析の結果、最大面積だった部分の抽出
             self.center_x = int(maxblob["center"][0])
             self.center_y = int(maxblob["center"][1])
 
             #TODO フレームごとに、予測線から最も近いブロブを解析する
-            min_HP = self.getNearestValue(center, [HeadPointArray_x[self.frame_num],
-                                                   HeadPointArray_y[self.frame_num]])
-            if bool(min_HP):
-                cv2.circle(frame, (min_HP[0], min_HP[1]), 30, (0, 0, 255),
-                      thickness=3, lineType=cv2.LINE_AA)
-            else:
-                pass
+            #今問題なのは、フレーム毎にどれだけ予測線を移動させるか
+            #HP : Head Point
             
+            min_HP_x = self.getNearestValue(center[:, 0], HeadPointArray_x[self.frame_num])
+            min_HP_y = self.getNearestValue(center[:, 1], HeadPointArray_y[self.frame_num])
+            self.min_HP = [min_HP_x, min_HP_y]
+            print("frame : ", self.frame_num)
+            
+            #現在の引いた線の場所
+            cv2.circle(frame, (int(HeadPointArray_x[self.frame_num]), 
+                               int(HeadPointArray_y[self.frame_num])), 30, (0, 255, 0),
+                               thickness=3, lineType=cv2.LINE_AA)
+            
+            #一番近いブロブ
+            if (self.min_HP[0] is not None) & (self.min_HP[1] is not None):
+                cv2.circle(frame, (int(self.min_HP[0]), int(self.min_HP[1])),
+                           30, (0, 0, 255), thickness=3, lineType=cv2.LINE_AA)
+
             #ラベル付けされたブロブに円を描画
-            """
             cv2.circle(frame, (self.center_x, self.center_y), 30, (0, 200, 0),
                       thickness=3, lineType=cv2.LINE_AA)
-            """
+            
             #表示する用のデータのトリミング
             if S_x <= self.center_x <= G_x:
                 data.append([self.frame_num, self.center_x, self.center_y, self.N_frame_time])
@@ -449,8 +462,7 @@ class HSV_supporter:
             else:
                 continue
 
-            cv2.imshow("first frame", cp_frame0)
-            
+            #cv2.imshow("first frame", cp_frame0)
             #frame=self.resize_image(frame, None, .8, .8)
             cv2.imshow(self.window_name1, frame)
 
@@ -470,12 +482,10 @@ class HSV_supporter:
 if __name__ == '__main__':
     if len(sys.argv) == 1:
         videofile_path = "20191122/nihongi_f_l1.mp4"
-        HumanHeight     = 165.0
-
+        HumanHeight     = 160.0
     elif len(sys.argv) == 2:
         videofile_path = sys.argv[1]
-        HumanHeight     = 165.0
-
+        HumanHeight     = 160.0
     elif len(sys.argv) == 3:
         videofile_path = sys.argv[1]
         HumanHeight     = sys.argv[2]

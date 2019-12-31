@@ -19,9 +19,7 @@ try:
 except: pass
 
 #setup global
-print("小池くんの作ったプログラムだよ。クソだよ。")
 image_frag = True
-
 global S2G
 S2G = int(460 + 477) #STARTからGOALまでの距離(cm)
 
@@ -60,7 +58,7 @@ class Mouse:
                 image_frag = True
                 self.ClickedPoint[0] = M_x
                 self.ClickedPoint[1] = M_y
-                print("[1st] : ", self.ClickedPoint[0], self.ClickedPoint[1])
+                print("1st : ", self.ClickedPoint[0], self.ClickedPoint[1])
 
                 cv2.circle(self.cp_image, (self.ClickedPoint[0], self.ClickedPoint[1]), 5, (0, 0, 255), -1)
                 cv2.putText(self.cp_image, "START", (self.ClickedPoint[0] - 40,
@@ -71,7 +69,7 @@ class Mouse:
             elif self.event_call == 2:
                 self.ClickedPoint[2] = M_x
                 self.ClickedPoint[3] = M_y
-                print("[2nd] : ", self.ClickedPoint[2], self.ClickedPoint[3])
+                print("2nd : ", self.ClickedPoint[2], self.ClickedPoint[3])
 
                 cv2.circle(self.cp_image, (self.ClickedPoint[2], self.ClickedPoint[3]), 5, (0, 255, 0), -1)
                 cv2.putText(self.cp_image, "GOAL", (self.ClickedPoint[2] - 40,
@@ -82,7 +80,7 @@ class Mouse:
                 cv2.line(self.cp_image, (self.ClickedPoint[0], self.ClickedPoint[1]),
                                         (self.ClickedPoint[2], self.ClickedPoint[3]),(255, 0, 0), 2)
 
-                #トラッキング範囲を推定。被験者の身長から割り出す <-- この処理本当に必要ぉ??
+                #トラッキング範囲を推定。被験者の身長から割り出す
                 S_x = self.ClickedPoint[0]
                 S_y = self.ClickedPoint[1]
                 G_x = self.ClickedPoint[2]
@@ -230,7 +228,8 @@ class HSV_supporter:
 
         fig, (axL, axR) = plt.subplots(ncols = 2, sharex = "none", figsize = (10,4))
         fig.suptitle("VIDEO PATH : " + VideoName)
-
+        
+        
         #1つ目のグラフ描画
         axL.plot(f, x, "r-", linewidth=1.5, label = "x")
         axL.plot(f, y, "g-", linewidth=1.5, label = "y")
@@ -262,6 +261,28 @@ class HSV_supporter:
         #グラフのセーブ
         sNAME = VideoName.strip('.mp4') + '.png'
         fig.savefig(sNAME)
+        
+        # 工事中
+        """
+        import statsmodels.api as sm
+        res = sm.tsa.seasonal_decompose(Velocity, freq=2)
+        
+        plt.subplots_adjust(hspace=0.3)
+        plt.figure(figsize=(15, 9))
+        plt.subplot(411)
+        plt.plot(res.observed, lw=.6, c='darkblue')
+        plt.title('observed')
+        plt.subplot(412)
+        plt.plot(res.trend, lw=.6, c='indianred')
+        plt.title('trend')
+        plt.subplot(413)
+        plt.plot(res.seasonal, lw=.6, c='indianred')
+        plt.title('seasonal')
+        plt.subplot(414)
+        plt.plot(res.resid, lw=.6, c='indianred')
+        plt.title('residual')
+        plt.show()
+        """
 
     #トラックバーからコールバックを受け取り、値を返す
     def trackbars(self):
@@ -376,13 +397,12 @@ class HSV_supporter:
         print("[INFO] : Distance from START to GOAL is {0} pixel".format(G_x - S_x))
         print("[INFO] : So {0}(cm) is calculated as {1} pixcel".format(S2G, G_x - S_x))
         print("[INFO] : K is ", self.K)
-        time.sleep(.2)
 
         #メインのループ
         while(cap.isOpened()):
             ret, frame = cap.read()
             if frame is None:
-                print("frame is None")
+                print("\nframe is None")
                 break
             
             #最初の処理で指定したSTARTとGOALに合わせてトリミングする
@@ -418,7 +438,7 @@ class HSV_supporter:
             if self.ColorErase is True: mask = self.color_eraser(mask, None)
 
             _, center, maxblob = self.analysis_blob(mask)
-            #print("target num:",len(center))
+            print("\rtarget num:{0}, FRAME:{1}".format(len(center), self.frame_num), end="")
 
             #見つけた領域にとりあえず円を描画してみる
             #ちょい重いから、マシンスペックに応じてコメントアウトするといいかも
@@ -429,11 +449,12 @@ class HSV_supporter:
             #ブロブ解析の結果、最大面積だった部分の抽出
             self.center_x = int(maxblob["center"][0])
             self.center_y = int(maxblob["center"][1])
-
+            
+            # 工事中
+            """
             #TODO フレームごとに、予測線から最も近いブロブを解析する
             #今問題なのは、フレーム毎にどれだけ予測線を移動させるか
             #HP : Head Point
-            
             min_HP_x = self.getNearestValue(center[:, 0], HeadPointArray_x[self.frame_num])
             min_HP_y = self.getNearestValue(center[:, 1], HeadPointArray_y[self.frame_num])
             self.min_HP = [min_HP_x, min_HP_y]
@@ -448,7 +469,7 @@ class HSV_supporter:
             if (self.min_HP[0] is not None) & (self.min_HP[1] is not None):
                 cv2.circle(frame, (int(self.min_HP[0]), int(self.min_HP[1])),
                            30, (0, 0, 255), thickness=3, lineType=cv2.LINE_AA)
-
+            """
             #ラベル付けされたブロブに円を描画
             cv2.circle(frame, (self.center_x, self.center_y), 30, (0, 200, 0),
                       thickness=3, lineType=cv2.LINE_AA)
@@ -469,26 +490,31 @@ class HSV_supporter:
             mask = self.resize_image(mask, None, .8, .8)
             cv2.imshow("mask image", mask)
 
-            print("-----")
-
-            if cv2.waitKey(1000) & 0xFF == ord('q'):
+            if cv2.waitKey(100) & 0xFF == ord('q'):
                 break
 
         cap.release()
         cv2.destroyAllWindows()
-
+   
         self.data_plot(data, videofile_path)
 
 if __name__ == '__main__':
     if len(sys.argv) == 1:
         videofile_path = "20191122/nihongi_f_l1.mp4"
-        HumanHeight     = 160.0
+        HumanHeight    = 160.0
     elif len(sys.argv) == 2:
         videofile_path = sys.argv[1]
-        HumanHeight     = 160.0
+        HumanHeight    = 160.0
     elif len(sys.argv) == 3:
         videofile_path = sys.argv[1]
-        HumanHeight     = sys.argv[2]
+        HumanHeight    = sys.argv[2]
 
     hsv_sup = HSV_supporter()
-    hsv_sup.main(videofile_path, HumanHeight)
+    
+    try:
+        hsv_sup.main(videofile_path, HumanHeight)
+    except ZeroDivisionError as err:
+        print(err, type(e))
+    else:
+        print("[INFO] : Completed successfully")
+        

@@ -22,6 +22,7 @@ except: pass
 image_frag = True
 global S2G
 S2G = int(460 + 477) #STARTからGOALまでの距離(cm)
+frame_rate = 30      #動画のフレームレート
 
 class Mouse:
     def __init__(self, window_name, cp_image, org_image, HumanHeight):
@@ -81,12 +82,8 @@ class Mouse:
                                         (self.ClickedPoint[2], self.ClickedPoint[3]),(255, 0, 0), 2)
 
                 #トラッキング範囲を推定。被験者の身長から割り出す
-                S_x = self.ClickedPoint[0]
-                S_y = self.ClickedPoint[1]
-                G_x = self.ClickedPoint[2]
-                G_y = self.ClickedPoint[3]
+                S_x, S_y, G_x, G_y = self.ClickedPoint
 
-                #後の処理で同じことする。書いたやつアホ
                 #単位ピクセルあたりの実際の距離を算出して、Y軸から減算
                 px_d = G_x - S_x
                 K    = S2G / px_d
@@ -96,11 +93,11 @@ class Mouse:
                 HG_y = int(G_y - S2H)
                 cv2.line(self.cp_image, (S_x, HS_y), (G_x, HG_y),(70, 220, 140), 2)
                 self.Prediction = [S_x, HS_y, G_x, HG_y]
-                print("[Prediction array] : ", self.Prediction)
+                print("<Prediction array> : ", self.Prediction)
 
             #2回目以降のクリック
             elif self.event_call > 2:
-                print("Update Image")
+                print("Reload Image")
                 image_frag = False
 
                 #クリック回数、イメージに描いた線、マウス座標をリセット
@@ -147,8 +144,7 @@ class HSV_supporter:
 
         self.K            = 0                     # 単位ピクセルあたりの実際の距離(cm)
         self.frame_num    = 0                     # 全体のフレーム数
-        self.frame_rate   = 30                    # 入力動画のfps
-        self.frame_time   = 1 / self.frame_rate   # 単位フレームあたりの時間
+        self.frame_time   = 1 / frame_rate        # 単位フレームあたりの時間
         self.N_frame_time = 0                     # Nフレーム時の時間
         self.velocity     = 0                     # 瞬間の速度
 
@@ -173,6 +169,23 @@ class HSV_supporter:
         mask = cv2.inRange(hsv, hsv_min, hsv_max)
 
         return mask
+    
+    # 速度の計算
+    def _velocity(self, x, y):
+        #ピクセル --> 距離(M)に変換
+        __real_x = (self.K * x) * (1 / 100)
+        __real_y = (self.K * y) * (1 / 100)
+
+        #フレームN --> フレームN+1 までの間に移動した微小距離dxの計算
+        #x[1:]-x[:-1] で隣接する要素の引き算ができる
+        __diff_real_x = __real_x[1:] - __real_x[:-1]
+        __diff_real_y = __real_y[1:] - __real_y[:-1]
+        
+        #隣接するフレーム間の微小距離dxを算出
+        __dx = np.sqrt(__diff_real_x**2 + __diff_real_y**2)
+        
+        __Velocity = __dx / self.frame_time
+        return __Velocity
 
     #ブロブ解析
     def analysis_blob(self, binary_img):
@@ -210,25 +223,12 @@ class HSV_supporter:
             x = data_np[:,1]
             y = data_np[:,2]
             t = data_np[:,3]
-
-        #ピクセル --> 距離(M)に変換
-        real_x = (self.K * x) * (1 / 100)
-        real_y = (self.K * y) * (1 / 100)
-
-        #フレームN --> フレームN+1 までの間に移動した微小距離dxの計算
-        #x[1:]-x[:-1] で隣接する要素の引き算ができる
-        diff_real_x = real_x[1:] - real_x[:-1]
-        diff_real_y = real_y[1:] - real_y[:-1]
-
-        #隣接するフレーム間の相対的な二次元空間の微小距離dxを算出
-        dx = np.sqrt(diff_real_x**2 + diff_real_y**2)
-
+        
         #瞬間の速度を計算
-        Velocity = dx / self.frame_time
+        Velocity = self._velocity(x, y)
 
         fig, (axL, axR) = plt.subplots(ncols = 2, sharex = "none", figsize = (10,4))
-        fig.suptitle("VIDEO PATH : " + VideoName)
-        
+        fig.suptitle("VIDEO PATH : " + VideoName)  
         
         #1つ目のグラフ描画
         axL.plot(f, x, "r-", linewidth=1.5, label = "x")
@@ -259,30 +259,8 @@ class HSV_supporter:
         plt.show()
 
         #グラフのセーブ
-        sNAME = VideoName.strip('.mp4') + '.png'
-        fig.savefig(sNAME)
-        
-        # 工事中
-        """
-        import statsmodels.api as sm
-        res = sm.tsa.seasonal_decompose(Velocity, freq=2)
-        
-        plt.subplots_adjust(hspace=0.3)
-        plt.figure(figsize=(15, 9))
-        plt.subplot(411)
-        plt.plot(res.observed, lw=.6, c='darkblue')
-        plt.title('observed')
-        plt.subplot(412)
-        plt.plot(res.trend, lw=.6, c='indianred')
-        plt.title('trend')
-        plt.subplot(413)
-        plt.plot(res.seasonal, lw=.6, c='indianred')
-        plt.title('seasonal')
-        plt.subplot(414)
-        plt.plot(res.resid, lw=.6, c='indianred')
-        plt.title('residual')
-        plt.show()
-        """
+        sNAME = VideoName.strip('.mp4')
+        fig.savefig(sNAME + '.png')
 
     #トラックバーからコールバックを受け取り、値を返す
     def trackbars(self):
@@ -352,7 +330,7 @@ class HSV_supporter:
             self.Trackbars_init()
 
         if cap.isOpened():
-            print("[INFO] : The Video loaded successfully.")
+            print("[INFO] : Video loaded successfully.")
         else:
             print("[INFO] : LOAD ERROR *** Chack video path or name ***")
             print("CAP : ", cap)
@@ -376,7 +354,7 @@ class HSV_supporter:
             cv2.imshow(self.window_name0, cp_frame0)
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
-                print("\n[INFO] : Order 'q' key. Proceed to the next step!")
+                print("[INFO] : Order 'q' key. Proceed to the next step...../\n")
                 time.sleep(.2)
                 break
 
@@ -385,14 +363,6 @@ class HSV_supporter:
         #マウス座標のアンパックとピクセルから距離の割り出し
         S_x, S_y, G_x, G_y = mouse.clicked_point()
         self.K = self.px2cm(S_x, S_y, G_x, G_y)
-        
-        #頭のトラッキング位置を推定して画像に描画した線を配列にする
-        Ps_x, Ps_y, Pg_x, Pg_y = mouse.prediction()
-        HP_dx = Pg_x - Ps_x
-        HP_dy = Pg_y - Ps_y
-        #ピクセルの座標はint型
-        HeadPointArray_x = np.linspace(Ps_x, Pg_x, HP_dx, dtype=np.int32)
-        HeadPointArray_y = np.linspace(Ps_y, Pg_y, HP_dx, dtype=np.int32)
         
         print("[INFO] : Distance from START to GOAL is {0} pixel".format(G_x - S_x))
         print("[INFO] : So {0}(cm) is calculated as {1} pixcel".format(S2G, G_x - S_x))
@@ -450,71 +420,50 @@ class HSV_supporter:
             self.center_x = int(maxblob["center"][0])
             self.center_y = int(maxblob["center"][1])
             
-            # 工事中
-            """
-            #TODO フレームごとに、予測線から最も近いブロブを解析する
-            #今問題なのは、フレーム毎にどれだけ予測線を移動させるか
-            #HP : Head Point
-            min_HP_x = self.getNearestValue(center[:, 0], HeadPointArray_x[self.frame_num])
-            min_HP_y = self.getNearestValue(center[:, 1], HeadPointArray_y[self.frame_num])
-            self.min_HP = [min_HP_x, min_HP_y]
-            print("frame : ", self.frame_num)
-            
-            #現在の引いた線の場所
-            cv2.circle(frame, (int(HeadPointArray_x[self.frame_num]), 
-                               int(HeadPointArray_y[self.frame_num])), 30, (0, 255, 0),
-                               thickness=3, lineType=cv2.LINE_AA)
-            
-            #一番近いブロブ
-            if (self.min_HP[0] is not None) & (self.min_HP[1] is not None):
-                cv2.circle(frame, (int(self.min_HP[0]), int(self.min_HP[1])),
-                           30, (0, 0, 255), thickness=3, lineType=cv2.LINE_AA)
-            """
             #ラベル付けされたブロブに円を描画
             cv2.circle(frame, (self.center_x, self.center_y), 30, (0, 200, 0),
                       thickness=3, lineType=cv2.LINE_AA)
             
-            #表示する用のデータのトリミング
+            # 円を表示する用のデータを選択(選択したSTART-GOAL以外のデータは捨てる)
             if S_x <= self.center_x <= G_x:
                 data.append([self.frame_num, self.center_x, self.center_y, self.N_frame_time])
 
                 self.N_frame_time = self.frame_time * self.frame_num
                 self.frame_num += 1
-            else:
-                continue
+            else: continue
 
-            #cv2.imshow("first frame", cp_frame0)
-            #frame=self.resize_image(frame, None, .8, .8)
+            cv2.imshow("first frame", cp_frame0)
+            frame=self.resize_image(frame, None, .8, .8)
             cv2.imshow(self.window_name1, frame)
 
             mask = self.resize_image(mask, None, .8, .8)
             cv2.imshow("mask image", mask)
 
-            if cv2.waitKey(100) & 0xFF == ord('q'):
+            if cv2.waitKey(10) & 0xFF == ord('q'):
                 break
 
         cap.release()
         cv2.destroyAllWindows()
-   
+        
         self.data_plot(data, videofile_path)
 
 if __name__ == '__main__':
     if len(sys.argv) == 1:
         videofile_path = "20191122/nihongi_f_l1.mp4"
-        HumanHeight    = 160.0
+        HumanHeight = 160.0
     elif len(sys.argv) == 2:
         videofile_path = sys.argv[1]
-        HumanHeight    = 160.0
+        HumanHeight = 160.0
     elif len(sys.argv) == 3:
         videofile_path = sys.argv[1]
-        HumanHeight    = sys.argv[2]
+        HumanHeight = sys.argv[2]
 
     hsv_sup = HSV_supporter()
     
     try:
         hsv_sup.main(videofile_path, HumanHeight)
     except ZeroDivisionError as err:
-        print(err, type(e))
+        print(err, type(err))
     else:
         print("[INFO] : Completed successfully")
         
